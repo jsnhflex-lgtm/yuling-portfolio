@@ -559,53 +559,58 @@
     }
     setTimeout(handleLoaded, 3000);
 
-    // === SCROLL-DRIVEN VIDEO SCRUB (smooth constant-speed interpolation) ===
-    // No matter how fast the user scrolls, the video advances at a fixed rate.
-    // This prevents freezing/jumping when scrolling rapidly to the bottom.
-    let videoTargetTime = 0;
-    let videoCurrentTime = 0;
-    const VIDEO_DURATION = video ? video.duration || 5.626 : 5.626;
-    // Playback speed relative to scroll: 0.6 = video takes longer than scroll
-    const VIDEO_PLAYBACK_RATE = 0.6;
-    // Step per frame at 60fps
-    const VIDEO_STEP = (1 / 60) * VIDEO_PLAYBACK_RATE * VIDEO_DURATION;
+    // === DAMPED SCROLL — limits scroll speed so the page never jumps ===
+    // No matter how fast the user scrolls, the scrollbar moves at a fixed
+    // damped rate. This prevents the video from ever freezing or skipping.
+    let dampedTargetY = 0;
+    let dampedCurrentY = 0;
+    const SCROLL_STEP = 45;       // pixels per wheel event (fixed, not multiplied by delta)
+    const SCROLL_DAMPING = 0.09;  // lower = slower, smoother
 
-    // Update target based on scroll position
-    const updateVideoTarget = () => {
-      if (!isLoaded || !video || !video.duration) return;
-      const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-      const scrollFraction = Math.max(0, Math.min(1, window.scrollY / maxScroll));
-      videoTargetTime = (scrollFraction * video.duration) % video.duration;
+    const getMaxScroll = () => Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+
+    // Intercept wheel events — apply fixed step, prevent native fast scroll
+    window.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      dampedTargetY += e.deltaY > 0 ? SCROLL_STEP : -SCROLL_STEP;
+      dampedTargetY = Math.max(0, Math.min(dampedTargetY, getMaxScroll()));
+    }, { passive: false });
+
+    // Also intercept touchpad / touch events for mobile
+    window.addEventListener('touchmove', (e) => {
+      // Only intercept single-finger scroll-like touches
+      if (e.touches.length === 1) {
+        // We still allow native scroll on touch for now — wheel is the main fix
+      }
+    }, { passive: true });
+
+    // Smooth scroll + video scrub loop
+    const dampedScrollLoop = () => {
+      // Lerp current toward target
+      dampedCurrentY += (dampedTargetY - dampedCurrentY) * SCROLL_DAMPING;
+
+      // Snap if very close
+      if (Math.abs(dampedTargetY - dampedCurrentY) < 0.5) {
+        dampedCurrentY = dampedTargetY;
+      }
+
+      // Apply scroll position
+      window.scrollTo(0, dampedCurrentY);
+
+      // Sync video to current scroll position
+      if (isLoaded && video && video.duration) {
+        const scrollFraction = Math.max(0, Math.min(1, dampedCurrentY / getMaxScroll()));
+        const targetTime = (scrollFraction * video.duration) % video.duration;
+        if (!video.seeking) {
+          video.currentTime = targetTime;
+        }
+      }
+
+      requestAnimationFrame(dampedScrollLoop);
     };
 
-    // Smooth animation loop — advances videoCurrentTime toward target at constant speed
-    const smoothVideoLoop = () => {
-      if (!isLoaded || !video || !video.duration) {
-        requestAnimationFrame(smoothVideoLoop);
-        return;
-      }
-      const diff = videoTargetTime - videoCurrentTime;
-      const step = VIDEO_STEP;
-      if (Math.abs(diff) < step) {
-        videoCurrentTime = videoTargetTime;
-      } else if (diff > 0) {
-        videoCurrentTime = Math.min(videoCurrentTime + step, videoTargetTime);
-      } else {
-        videoCurrentTime = Math.max(videoCurrentTime - step, videoTargetTime);
-      }
-      // Keep in bounds with modulo for looping
-      videoCurrentTime = ((videoCurrentTime % video.duration) + video.duration) % video.duration;
-      if (!video.seeking) {
-        video.currentTime = videoCurrentTime;
-      }
-      requestAnimationFrame(smoothVideoLoop);
-    };
-
-    // Start the smooth loop
-    smoothVideoLoop();
-
-    // Scroll just updates the target — the loop handles the actual seeking
-    window.addEventListener('scroll', updateVideoTarget, { passive: true });
+    // Start the damped scroll + video loop
+    dampedScrollLoop();
 
     // === VIDEO RECOVERY on visibility change (fix freeze after tab switch) ===
     document.addEventListener('visibilitychange', () => {
@@ -617,8 +622,8 @@
             setTimeout(() => retrySync(attempt + 1), 100);
             return;
           }
-          // Force a scroll sync to re-align video with current scroll position
-          updateVideoTarget();
+          // Re-sync damped target to current scroll position
+          dampedTargetY = window.scrollY;
         };
         retrySync();
       }
