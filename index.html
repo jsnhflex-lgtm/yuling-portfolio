@@ -32,23 +32,28 @@
       overflow-x: hidden;
     }
 
-    /* === VIDEO BACKGROUND === */
+    /* === VIDEO BACKGROUND — auto-play loop, no scrub === */
+    #video-bg {
+      position: fixed; inset: 0; z-index: 0;
+      overflow: hidden;
+    }
     #video-bg video {
       position: absolute; top: 50%; left: 50%;
       transform: translate(-50%, -50%);
       min-width: 100%; min-height: 100%;
+      width: 100%; height: 100%;
       object-fit: cover;
     }
 
-    /* === VIDEO OVERLAY (subtle dark gradient so text is readable) === */
+    /* === VIDEO OVERLAY with GSAP parallax === */
     #video-overlay {
       position: fixed; inset: 0; z-index: 1; pointer-events: none;
-      background: linear-gradient(180deg, rgba(0,0,0,0.60) 0%, rgba(0,0,0,0.35) 40%, rgba(0,0,0,0.50) 70%, rgba(0,0,0,0.85) 100%);
+      background: linear-gradient(180deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.30) 30%, rgba(0,0,0,0.40) 60%, rgba(0,0,0,0.80) 100%);
+      will-change: opacity;
     }
 
     /* === LAYER STRUCTURE === */
-    #video-bg { z-index: 0; }
-    #main-content { z-index: 10; pointer-events: none; }
+    #main-content { z-index: 10; pointer-events: none; position: relative; }
     .pointer-on { pointer-events: auto; }
     #header { z-index: 20; }
     #loading { z-index: 50; }
@@ -116,7 +121,7 @@
     }
     [data-reveal="visible"] { opacity: 1; transform: translateY(0); }
 
-    /* === GLASS PANEL (cinematic-editorial signature) === */
+    /* === GLASS PANEL === */
     .glass {
       background: rgba(255,255,255,0.04);
       backdrop-filter: blur(20px);
@@ -189,6 +194,11 @@
       text-decoration: none; color: #fff;
     }
     #footer a:hover { opacity: 1; }
+
+    /* === PARALLAX SECTIONS === */
+    .parallax-section {
+      will-change: transform, opacity;
+    }
   </style>
 </head>
 <body>
@@ -200,9 +210,9 @@
     <div class="loading-dot"></div>
   </div>
 
-  <!-- ===== VIDEO BACKGROUND ===== -->
-  <div id="video-bg" class="fixed inset-0 z-0 bg-black">
-    <video id="hero-video" muted playsinline preload="auto">
+  <!-- ===== VIDEO BACKGROUND (auto-loop, no scrub) ===== -->
+  <div id="video-bg">
+    <video id="hero-video" muted loop playsinline preload="auto" autoplay>
       <source src="hero.mp4" type="video/mp4" />
     </video>
   </div>
@@ -223,7 +233,7 @@
   <div id="main-content" class="relative z-10">
 
     <!-- ===== HERO SECTION ===== -->
-    <section id="hero" class="relative min-h-screen flex flex-col justify-center px-8 md:px-16 lg:px-24" style="padding-top: 6rem;">
+    <section id="hero" class="parallax-section relative min-h-screen flex flex-col justify-center px-8 md:px-16 lg:px-24" style="padding-top: 6rem;">
       <div data-reveal class="max-w-4xl">
         <p class="mono-meta mb-6">AIGC Designer · 21 · Based in Chongqing</p>
         <h1 class="text-5xl md:text-7xl lg:text-8xl font-light leading-[1.05] tracking-tight">
@@ -251,7 +261,7 @@
     </section>
 
     <!-- ===== SCROLL REVEAL BIG TEXT ===== -->
-    <section class="relative px-8 md:px-16 lg:px-24 py-32 md:py-48">
+    <section class="parallax-section relative px-8 md:px-16 lg:px-24 py-32 md:py-48">
       <div class="max-w-6xl mx-auto">
         <h2 data-scroll-reveal data-text-class="text-3xl md:text-5xl lg:text-6xl font-light leading-[1.15] tracking-tight text-white/90">
           I treat AI tools as an extension of creative intuition — 
@@ -263,7 +273,7 @@
     </section>
 
     <!-- ===== WORK SECTION ===== -->
-    <section id="work" class="relative px-8 md:px-16 lg:px-24 py-24">
+    <section id="work" class="parallax-section relative px-8 md:px-16 lg:px-24 py-24">
       <div class="max-w-6xl mx-auto">
         <div data-reveal class="mb-16">
           <p class="mono-meta mb-3">01 · Selected Work</p>
@@ -359,7 +369,7 @@
     </section>
 
     <!-- ===== PROCESS / STUDIO SECTION ===== -->
-    <section id="process" class="relative px-8 md:px-16 lg:px-24 py-24">
+    <section id="process" class="parallax-section relative px-8 md:px-16 lg:px-24 py-24">
       <div class="max-w-6xl mx-auto">
         <div data-reveal class="mb-16">
           <p class="mono-meta mb-3">02 · Toolchain</p>
@@ -405,7 +415,7 @@
     </section>
 
     <!-- ===== ABOUT / INDEX SECTION ===== -->
-    <section id="studio" class="relative px-8 md:px-16 lg:px-24 py-24">
+    <section id="studio" class="parallax-section relative px-8 md:px-16 lg:px-24 py-24">
       <div class="max-w-6xl mx-auto">
         <div data-reveal class="mb-16">
           <p class="mono-meta mb-3">03 · About</p>
@@ -460,7 +470,7 @@
     </section>
 
     <!-- ===== CONTACT / INDEX ===== -->
-    <section id="index" class="relative px-8 md:px-16 lg:px-24 py-24">
+    <section id="index" class="parallax-section relative px-8 md:px-16 lg:px-24 py-24">
       <div class="max-w-6xl mx-auto">
         <div data-reveal class="mb-12">
           <p class="mono-meta mb-3">04 · Contact</p>
@@ -538,7 +548,6 @@
   <!-- ===== SCRIPTS ===== -->
   <script>
     // === VIDEO LOADING ===
-    const VIDEO_URL = 'hero.mp4';
     const video = document.getElementById('hero-video');
     let isLoaded = false;
 
@@ -546,6 +555,8 @@
       if (isLoaded) return;
       isLoaded = true;
       document.body.dataset.loaded = 'true';
+      // Start playing automatically once loaded
+      video.play().catch(() => {});
     };
 
     if (video) {
@@ -556,18 +567,47 @@
     }
     setTimeout(handleLoaded, 3000);
 
-    // === SCROLL-DRIVEN VIDEO SCRUB (with loop for short video) ===
-    window.addEventListener('scroll', () => {
-      if (!isLoaded || !video || !video.duration || video.seeking) return;
-      const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-      const scrollFraction = Math.max(0, Math.min(1, window.scrollY / maxScroll));
-      // Loop the video by using modulo — short videos (<10s) repeat across full scroll
-      video.currentTime = (scrollFraction * video.duration) % video.duration;
-    }, { passive: true });
+    // === VIDEO RECOVERY on visibility change (fix freeze after tab switch) ===
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && video && isLoaded && video.paused) {
+        video.play().catch(() => {});
+      }
+    });
 
-    // === GSAP SCROLL REVEAL (word-by-word) ===
+    // === GSAP PARALLAX — sections move at different speeds for cinematic scroll ===
     if (window.gsap && window.ScrollTrigger) {
       gsap.registerPlugin(ScrollTrigger);
+
+      // Parallax each section: move up slower than scroll
+      document.querySelectorAll('.parallax-section').forEach((section) => {
+        gsap.fromTo(section, 
+          { y: 0 },
+          { 
+            y: () => -section.offsetHeight * 0.08,
+            ease: 'none',
+            scrollTrigger: {
+              trigger: section,
+              start: 'top bottom',
+              end: 'bottom top',
+              scrub: 1.2,
+            }
+          }
+        );
+      });
+
+      // Overlay opacity shift — darkens as you scroll down
+      gsap.to('#video-overlay', {
+        opacity: 0.85,
+        ease: 'none',
+        scrollTrigger: {
+          trigger: 'body',
+          start: 'top top',
+          end: () => 'bottom bottom',
+          scrub: 1.5,
+        }
+      });
+
+      // === GSAP SCROLL REVEAL (word-by-word) ===
       document.querySelectorAll('[data-scroll-reveal]').forEach((el) => {
         const text = el.textContent || '';
         el.textContent = '';
