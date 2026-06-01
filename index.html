@@ -589,11 +589,20 @@
 
     window.addEventListener('scroll', onScroll, { passive: true });
 
-    // === VIDEO RECOVERY on visibility change ===
+    // === VIDEO RECOVERY on visibility change (fix freeze after tab switch) ===
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && video && isLoaded) {
-        // Re-sync video position after tab switch
-        updateVideo();
+        // Browser may still be seeking after tab switch — retry until ready
+        const retrySync = (attempt = 0) => {
+          if (attempt > 10) return;
+          if (video.seeking || video.paused) {
+            setTimeout(() => retrySync(attempt + 1), 100);
+            return;
+          }
+          // Force a scroll sync to re-align video with current scroll position
+          onScroll();
+        };
+        retrySync();
       }
     });
 
