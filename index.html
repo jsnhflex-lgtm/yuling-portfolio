@@ -32,7 +32,7 @@
       overflow-x: hidden;
     }
 
-    /* === VIDEO BACKGROUND — auto-play loop, no scrub === */
+    /* === VIDEO BACKGROUND === */
     #video-bg {
       position: fixed; inset: 0; z-index: 0;
       overflow: hidden;
@@ -45,11 +45,10 @@
       object-fit: cover;
     }
 
-    /* === VIDEO OVERLAY with GSAP parallax === */
+    /* === VIDEO OVERLAY === */
     #video-overlay {
       position: fixed; inset: 0; z-index: 1; pointer-events: none;
       background: linear-gradient(180deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.30) 30%, rgba(0,0,0,0.40) 60%, rgba(0,0,0,0.80) 100%);
-      will-change: opacity;
     }
 
     /* === LAYER STRUCTURE === */
@@ -194,11 +193,6 @@
       text-decoration: none; color: #fff;
     }
     #footer a:hover { opacity: 1; }
-
-    /* === PARALLAX SECTIONS === */
-    .parallax-section {
-      will-change: transform, opacity;
-    }
   </style>
 </head>
 <body>
@@ -210,9 +204,9 @@
     <div class="loading-dot"></div>
   </div>
 
-  <!-- ===== VIDEO BACKGROUND (auto-loop, no scrub) ===== -->
+  <!-- ===== VIDEO BACKGROUND ===== -->
   <div id="video-bg">
-    <video id="hero-video" muted loop playsinline preload="auto" autoplay>
+    <video id="hero-video" muted playsinline preload="auto">
       <source src="hero.mp4" type="video/mp4" />
     </video>
   </div>
@@ -233,7 +227,7 @@
   <div id="main-content" class="relative z-10">
 
     <!-- ===== HERO SECTION ===== -->
-    <section id="hero" class="parallax-section relative min-h-screen flex flex-col justify-center px-8 md:px-16 lg:px-24" style="padding-top: 6rem;">
+    <section id="hero" class="relative min-h-screen flex flex-col justify-center px-8 md:px-16 lg:px-24" style="padding-top: 6rem;">
       <div data-reveal class="max-w-4xl">
         <p class="mono-meta mb-6">AIGC Designer · 21 · Based in Chongqing</p>
         <h1 class="text-5xl md:text-7xl lg:text-8xl font-light leading-[1.05] tracking-tight">
@@ -261,7 +255,7 @@
     </section>
 
     <!-- ===== SCROLL REVEAL BIG TEXT ===== -->
-    <section class="parallax-section relative px-8 md:px-16 lg:px-24 py-32 md:py-48">
+    <section class="relative px-8 md:px-16 lg:px-24 py-32 md:py-48">
       <div class="max-w-6xl mx-auto">
         <h2 data-scroll-reveal data-text-class="text-3xl md:text-5xl lg:text-6xl font-light leading-[1.15] tracking-tight text-white/90">
           I treat AI tools as an extension of creative intuition — 
@@ -273,7 +267,7 @@
     </section>
 
     <!-- ===== WORK SECTION ===== -->
-    <section id="work" class="parallax-section relative px-8 md:px-16 lg:px-24 py-24">
+    <section id="work" class="relative px-8 md:px-16 lg:px-24 py-24">
       <div class="max-w-6xl mx-auto">
         <div data-reveal class="mb-16">
           <p class="mono-meta mb-3">01 · Selected Work</p>
@@ -369,7 +363,7 @@
     </section>
 
     <!-- ===== PROCESS / STUDIO SECTION ===== -->
-    <section id="process" class="parallax-section relative px-8 md:px-16 lg:px-24 py-24">
+    <section id="process" class="relative px-8 md:px-16 lg:px-24 py-24">
       <div class="max-w-6xl mx-auto">
         <div data-reveal class="mb-16">
           <p class="mono-meta mb-3">02 · Toolchain</p>
@@ -415,7 +409,7 @@
     </section>
 
     <!-- ===== ABOUT / INDEX SECTION ===== -->
-    <section id="studio" class="parallax-section relative px-8 md:px-16 lg:px-24 py-24">
+    <section id="studio" class="relative px-8 md:px-16 lg:px-24 py-24">
       <div class="max-w-6xl mx-auto">
         <div data-reveal class="mb-16">
           <p class="mono-meta mb-3">03 · About</p>
@@ -470,7 +464,7 @@
     </section>
 
     <!-- ===== CONTACT / INDEX ===== -->
-    <section id="index" class="parallax-section relative px-8 md:px-16 lg:px-24 py-24">
+    <section id="index" class="relative px-8 md:px-16 lg:px-24 py-24">
       <div class="max-w-6xl mx-auto">
         <div data-reveal class="mb-12">
           <p class="mono-meta mb-3">04 · Contact</p>
@@ -555,8 +549,6 @@
       if (isLoaded) return;
       isLoaded = true;
       document.body.dataset.loaded = 'true';
-      // Start playing automatically once loaded
-      video.play().catch(() => {});
     };
 
     if (video) {
@@ -567,47 +559,48 @@
     }
     setTimeout(handleLoaded, 3000);
 
-    // === VIDEO RECOVERY on visibility change (fix freeze after tab switch) ===
+    // === SCROLL-DRIVEN VIDEO SCRUB (optimized for smoothness) ===
+    // Use requestAnimationFrame to throttle updates to vsync
+    let ticking = false;
+    let lastTime = -1;
+
+    const updateVideo = () => {
+      if (!isLoaded || !video || !video.duration || video.seeking) {
+        ticking = false;
+        return;
+      }
+      const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      const scrollFraction = Math.max(0, Math.min(1, window.scrollY / maxScroll));
+      // Loop the short video using modulo
+      const targetTime = (scrollFraction * video.duration) % video.duration;
+      // Only update if significantly different (avoid tiny seeks that cause stutter)
+      if (Math.abs(video.currentTime - targetTime) > 0.03) {
+        video.currentTime = targetTime;
+      }
+      ticking = false;
+    };
+
+    const onScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(updateVideo);
+        ticking = true;
+      }
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+
+    // === VIDEO RECOVERY on visibility change ===
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && video && isLoaded && video.paused) {
-        video.play().catch(() => {});
+      if (!document.hidden && video && isLoaded) {
+        // Re-sync video position after tab switch
+        updateVideo();
       }
     });
 
-    // === GSAP PARALLAX — sections move at different speeds for cinematic scroll ===
+    // === GSAP SCROLL REVEAL (word-by-word) ===
     if (window.gsap && window.ScrollTrigger) {
       gsap.registerPlugin(ScrollTrigger);
 
-      // Parallax each section: move up slower than scroll
-      document.querySelectorAll('.parallax-section').forEach((section) => {
-        gsap.fromTo(section, 
-          { y: 0 },
-          { 
-            y: () => -section.offsetHeight * 0.08,
-            ease: 'none',
-            scrollTrigger: {
-              trigger: section,
-              start: 'top bottom',
-              end: 'bottom top',
-              scrub: 1.2,
-            }
-          }
-        );
-      });
-
-      // Overlay opacity shift — darkens as you scroll down
-      gsap.to('#video-overlay', {
-        opacity: 0.85,
-        ease: 'none',
-        scrollTrigger: {
-          trigger: 'body',
-          start: 'top top',
-          end: () => 'bottom bottom',
-          scrub: 1.5,
-        }
-      });
-
-      // === GSAP SCROLL REVEAL (word-by-word) ===
       document.querySelectorAll('[data-scroll-reveal]').forEach((el) => {
         const text = el.textContent || '';
         el.textContent = '';
