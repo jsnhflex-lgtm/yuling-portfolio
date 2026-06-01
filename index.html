@@ -559,58 +559,64 @@
     }
     setTimeout(handleLoaded, 3000);
 
-    // === DAMPED SCROLL — limits scroll speed so the page never jumps ===
-    // No matter how fast the user scrolls, the scrollbar moves at a fixed
-    // damped rate. This prevents the video from ever freezing or skipping.
-    let dampedTargetY = 0;
-    let dampedCurrentY = 0;
-    const SCROLL_STEP = 45;       // pixels per wheel event (fixed, not multiplied by delta)
-    const SCROLL_DAMPING = 0.09;  // lower = slower, smoother
+    // === SECTION-BASED SCROLL — page advances in fixed steps ===
+    // The page is divided into N sections. Each wheel event advances exactly
+    // one section (1/N of total scroll). No matter how fast you scroll,
+    // you can only move one section at a time — the video stays perfectly in sync.
+    const TOTAL_SECTIONS = 5;  // Hero, ScrollReveal, Work, Process/Studio, About/Contact
+    let currentSection = 0;
+    let sectionScrollY = 0;
+    let sectionAnimating = false;
 
     const getMaxScroll = () => Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
 
-    // Intercept wheel events — apply fixed step, prevent native fast scroll
-    window.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      dampedTargetY += e.deltaY > 0 ? SCROLL_STEP : -SCROLL_STEP;
-      dampedTargetY = Math.max(0, Math.min(dampedTargetY, getMaxScroll()));
-    }, { passive: false });
+    // Smoothly animate to a target scroll position
+    const animateToScroll = (targetY) => {
+      if (sectionAnimating) return;
+      sectionAnimating = true;
+      const startY = window.scrollY;
+      const duration = 600; // ms for one section transition
+      const startTime = performance.now();
 
-    // Also intercept touchpad / touch events for mobile
-    window.addEventListener('touchmove', (e) => {
-      // Only intercept single-finger scroll-like touches
-      if (e.touches.length === 1) {
-        // We still allow native scroll on touch for now — wheel is the main fix
-      }
-    }, { passive: true });
+      const step = (now) => {
+        const elapsed = now - startTime;
+        const t = Math.min(elapsed / duration, 1);
+        // Ease out cubic
+        const ease = 1 - Math.pow(1 - t, 3);
+        const currentY = startY + (targetY - startY) * ease;
+        window.scrollTo(0, currentY);
 
-    // Smooth scroll + video scrub loop
-    const dampedScrollLoop = () => {
-      // Lerp current toward target
-      dampedCurrentY += (dampedTargetY - dampedCurrentY) * SCROLL_DAMPING;
-
-      // Snap if very close
-      if (Math.abs(dampedTargetY - dampedCurrentY) < 0.5) {
-        dampedCurrentY = dampedTargetY;
-      }
-
-      // Apply scroll position
-      window.scrollTo(0, dampedCurrentY);
-
-      // Sync video to current scroll position
-      if (isLoaded && video && video.duration) {
-        const scrollFraction = Math.max(0, Math.min(1, dampedCurrentY / getMaxScroll()));
-        const targetTime = (scrollFraction * video.duration) % video.duration;
-        if (!video.seeking) {
-          video.currentTime = targetTime;
+        // Sync video
+        if (isLoaded && video && video.duration) {
+          const scrollFraction = Math.max(0, Math.min(1, currentY / getMaxScroll()));
+          const targetTime = (scrollFraction * video.duration) % video.duration;
+          if (!video.seeking) {
+            video.currentTime = targetTime;
+          }
         }
-      }
 
-      requestAnimationFrame(dampedScrollLoop);
+        if (t < 1) {
+          requestAnimationFrame(step);
+        } else {
+          window.scrollTo(0, targetY);
+          sectionAnimating = false;
+        }
+      };
+      requestAnimationFrame(step);
     };
 
-    // Start the damped scroll + video loop
-    dampedScrollLoop();
+    // Intercept wheel — advance exactly one section per event
+    window.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      if (sectionAnimating) return;
+      if (e.deltaY > 0) {
+        currentSection = Math.min(currentSection + 1, TOTAL_SECTIONS - 1);
+      } else {
+        currentSection = Math.max(currentSection - 1, 0);
+      }
+      const targetY = (currentSection / (TOTAL_SECTIONS - 1)) * getMaxScroll();
+      animateToScroll(targetY);
+    }, { passive: false });
 
     // === VIDEO RECOVERY on visibility change (fix freeze after tab switch) ===
     document.addEventListener('visibilitychange', () => {
@@ -622,8 +628,9 @@
             setTimeout(() => retrySync(attempt + 1), 100);
             return;
           }
-          // Re-sync damped target to current scroll position
-          dampedTargetY = window.scrollY;
+          // Re-sync section to current scroll position
+          const scrollFrac = window.scrollY / getMaxScroll();
+          currentSection = Math.round(scrollFrac * (TOTAL_SECTIONS - 1));
         };
         retrySync();
       }
