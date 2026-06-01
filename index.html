@@ -559,23 +559,26 @@
     }
     setTimeout(handleLoaded, 3000);
 
-    // === SECTION-BASED SCROLL — page advances in fixed steps ===
-    // The page is divided into N sections. Each wheel event advances exactly
-    // one section (1/N of total scroll). No matter how fast you scroll,
-    // you can only move one section at a time — the video stays perfectly in sync.
-    const TOTAL_SECTIONS = 5;  // Hero, ScrollReveal, Work, Process/Studio, About/Contact
+    // === SLOW SECTION-BASED SCROLL — one section per deliberate gesture ===
+    // Mac trackpads fire many wheel events per gesture. We accumulate deltaY
+    // and only advance one section when a threshold is crossed. A cooldown
+    // prevents rapid-fire section skipping. Each transition is slow & cinematic.
+    const TOTAL_SECTIONS = 5;
     let currentSection = 0;
-    let sectionScrollY = 0;
     let sectionAnimating = false;
+    let wheelAccumulator = 0;
+    const WHEEL_THRESHOLD = 200;   // minimum accumulated delta to trigger one section
+    let lastSectionTime = 0;
+    const SECTION_COOLDOWN = 1000; // ms — must wait at least 1s between sections
 
     const getMaxScroll = () => Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
 
-    // Smoothly animate to a target scroll position
+    // Smoothly animate to a target scroll position (slow ease)
     const animateToScroll = (targetY) => {
       if (sectionAnimating) return;
       sectionAnimating = true;
       const startY = window.scrollY;
-      const duration = 600; // ms for one section transition
+      const duration = 1200; // ms — slow, cinematic transition
       const startTime = performance.now();
 
       const step = (now) => {
@@ -605,10 +608,22 @@
       requestAnimationFrame(step);
     };
 
-    // Intercept wheel — advance exactly one section per event
+    // Intercept wheel — accumulate delta, only advance when threshold crossed
     window.addEventListener('wheel', (e) => {
       e.preventDefault();
+      const now = performance.now();
+      // Reset accumulator if cooldown has elapsed (new gesture)
+      if (now - lastSectionTime > SECTION_COOLDOWN + 200) {
+        wheelAccumulator = 0;
+      }
+      wheelAccumulator += Math.abs(e.deltaY);
+      if (wheelAccumulator < WHEEL_THRESHOLD) return;
+      if (now - lastSectionTime < SECTION_COOLDOWN) return;
       if (sectionAnimating) return;
+
+      wheelAccumulator = 0;
+      lastSectionTime = now;
+
       if (e.deltaY > 0) {
         currentSection = Math.min(currentSection + 1, TOTAL_SECTIONS - 1);
       } else {
