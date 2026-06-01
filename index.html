@@ -559,6 +559,21 @@
     }
     setTimeout(handleLoaded, 3000);
 
+    // === INDEPENDENT VIDEO SYNC — always follows scroll position ===
+    // Whether triggered by wheel, scrollbar drag, or touchpad, the video
+    // stays locked to the current scroll fraction.
+    const syncVideoToScroll = () => {
+      if (!isLoaded || !video || !video.duration) return;
+      const scrollFraction = Math.max(0, Math.min(1, window.scrollY / getMaxScroll()));
+      const targetTime = (scrollFraction * video.duration) % video.duration;
+      if (!video.seeking) {
+        video.currentTime = targetTime;
+      }
+    };
+
+    // Listen to native scroll (scrollbar drag, touchpad momentum, etc.)
+    window.addEventListener('scroll', syncVideoToScroll, { passive: true });
+
     // === SLOW SECTION-BASED SCROLL — one section per deliberate gesture ===
     // Mac trackpads fire many wheel events per gesture. We accumulate deltaY
     // and only advance one section when a threshold is crossed. A cooldown
@@ -567,7 +582,7 @@
     let currentSection = 0;
     let sectionAnimating = false;
     let wheelAccumulator = 0;
-    const WHEEL_THRESHOLD = 200;   // minimum accumulated delta to trigger one section
+    const WHEEL_THRESHOLD = 50;    // lower threshold so touchpad responds quickly
     let lastSectionTime = 0;
     const SECTION_COOLDOWN = 1000; // ms — must wait at least 1s between sections
 
@@ -588,15 +603,6 @@
         const ease = 1 - Math.pow(1 - t, 3);
         const currentY = startY + (targetY - startY) * ease;
         window.scrollTo(0, currentY);
-
-        // Sync video
-        if (isLoaded && video && video.duration) {
-          const scrollFraction = Math.max(0, Math.min(1, currentY / getMaxScroll()));
-          const targetTime = (scrollFraction * video.duration) % video.duration;
-          if (!video.seeking) {
-            video.currentTime = targetTime;
-          }
-        }
 
         if (t < 1) {
           requestAnimationFrame(step);
