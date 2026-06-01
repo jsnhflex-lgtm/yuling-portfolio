@@ -575,16 +575,15 @@
     window.addEventListener('scroll', syncVideoToScroll, { passive: true });
 
     // === SLOW SECTION-BASED SCROLL — one section per deliberate gesture ===
-    // Mac trackpads fire many wheel events per gesture. We accumulate deltaY
-    // and only advance one section when a threshold is crossed. A cooldown
-    // prevents rapid-fire section skipping. Each transition is slow & cinematic.
+    // Uses a simple delta threshold + cooldown. No accumulation — every wheel
+    // event above a tiny threshold can trigger, but the cooldown prevents
+    // rapid-fire skipping. Responsive without being jumpy.
     const TOTAL_SECTIONS = 5;
     let currentSection = 0;
     let sectionAnimating = false;
-    let wheelAccumulator = 0;
-    const WHEEL_THRESHOLD = 50;    // lower threshold so touchpad responds quickly
     let lastSectionTime = 0;
     const SECTION_COOLDOWN = 1000; // ms — must wait at least 1s between sections
+    const WHEEL_MIN_DELTA = 8;     // ignore tiny jitter, but respond to light touch
 
     const getMaxScroll = () => Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
 
@@ -614,20 +613,14 @@
       requestAnimationFrame(step);
     };
 
-    // Intercept wheel — accumulate delta, only advance when threshold crossed
+    // Intercept wheel — simple threshold, no accumulation
     window.addEventListener('wheel', (e) => {
       e.preventDefault();
       const now = performance.now();
-      // Reset accumulator if cooldown has elapsed (new gesture)
-      if (now - lastSectionTime > SECTION_COOLDOWN + 200) {
-        wheelAccumulator = 0;
-      }
-      wheelAccumulator += Math.abs(e.deltaY);
-      if (wheelAccumulator < WHEEL_THRESHOLD) return;
       if (now - lastSectionTime < SECTION_COOLDOWN) return;
       if (sectionAnimating) return;
+      if (Math.abs(e.deltaY) < WHEEL_MIN_DELTA) return;
 
-      wheelAccumulator = 0;
       lastSectionTime = now;
 
       if (e.deltaY > 0) {
@@ -649,7 +642,9 @@
             setTimeout(() => retrySync(attempt + 1), 100);
             return;
           }
-          // Re-sync section to current scroll position
+          // Force video to current scroll position
+          syncVideoToScroll();
+          // Re-sync section index
           const scrollFrac = window.scrollY / getMaxScroll();
           currentSection = Math.round(scrollFrac * (TOTAL_SECTIONS - 1));
         };
