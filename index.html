@@ -559,35 +559,53 @@
     }
     setTimeout(handleLoaded, 3000);
 
-    // === SCROLL-DRIVEN VIDEO SCRUB (optimized for smoothness) ===
-    // Use requestAnimationFrame to throttle updates to vsync
-    let ticking = false;
-    let lastTime = -1;
+    // === SCROLL-DRIVEN VIDEO SCRUB (smooth constant-speed interpolation) ===
+    // No matter how fast the user scrolls, the video advances at a fixed rate.
+    // This prevents freezing/jumping when scrolling rapidly to the bottom.
+    let videoTargetTime = 0;
+    let videoCurrentTime = 0;
+    const VIDEO_DURATION = video ? video.duration || 5.626 : 5.626;
+    // Playback speed relative to scroll: 0.6 = video takes longer than scroll
+    const VIDEO_PLAYBACK_RATE = 0.6;
+    // Step per frame at 60fps
+    const VIDEO_STEP = (1 / 60) * VIDEO_PLAYBACK_RATE * VIDEO_DURATION;
 
-    const updateVideo = () => {
-      if (!isLoaded || !video || !video.duration || video.seeking) {
-        ticking = false;
-        return;
-      }
+    // Update target based on scroll position
+    const updateVideoTarget = () => {
+      if (!isLoaded || !video || !video.duration) return;
       const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
       const scrollFraction = Math.max(0, Math.min(1, window.scrollY / maxScroll));
-      // Loop the short video using modulo
-      const targetTime = (scrollFraction * video.duration) % video.duration;
-      // Only update if significantly different (avoid tiny seeks that cause stutter)
-      if (Math.abs(video.currentTime - targetTime) > 0.03) {
-        video.currentTime = targetTime;
-      }
-      ticking = false;
+      videoTargetTime = (scrollFraction * video.duration) % video.duration;
     };
 
-    const onScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(updateVideo);
-        ticking = true;
+    // Smooth animation loop — advances videoCurrentTime toward target at constant speed
+    const smoothVideoLoop = () => {
+      if (!isLoaded || !video || !video.duration) {
+        requestAnimationFrame(smoothVideoLoop);
+        return;
       }
+      const diff = videoTargetTime - videoCurrentTime;
+      const step = VIDEO_STEP;
+      if (Math.abs(diff) < step) {
+        videoCurrentTime = videoTargetTime;
+      } else if (diff > 0) {
+        videoCurrentTime = Math.min(videoCurrentTime + step, videoTargetTime);
+      } else {
+        videoCurrentTime = Math.max(videoCurrentTime - step, videoTargetTime);
+      }
+      // Keep in bounds with modulo for looping
+      videoCurrentTime = ((videoCurrentTime % video.duration) + video.duration) % video.duration;
+      if (!video.seeking) {
+        video.currentTime = videoCurrentTime;
+      }
+      requestAnimationFrame(smoothVideoLoop);
     };
 
-    window.addEventListener('scroll', onScroll, { passive: true });
+    // Start the smooth loop
+    smoothVideoLoop();
+
+    // Scroll just updates the target — the loop handles the actual seeking
+    window.addEventListener('scroll', updateVideoTarget, { passive: true });
 
     // === VIDEO RECOVERY on visibility change (fix freeze after tab switch) ===
     document.addEventListener('visibilitychange', () => {
@@ -600,7 +618,7 @@
             return;
           }
           // Force a scroll sync to re-align video with current scroll position
-          onScroll();
+          updateVideoTarget();
         };
         retrySync();
       }
