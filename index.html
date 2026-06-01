@@ -556,12 +556,13 @@
     }
     setTimeout(handleLoaded, 3000);
 
-    // === SCROLL-DRIVEN VIDEO SCRUB ===
+    // === SCROLL-DRIVEN VIDEO SCRUB (with loop for short video) ===
     window.addEventListener('scroll', () => {
       if (!isLoaded || !video || !video.duration || video.seeking) return;
       const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
       const scrollFraction = Math.max(0, Math.min(1, window.scrollY / maxScroll));
-      video.currentTime = scrollFraction * video.duration;
+      // Loop the video by using modulo — short videos (<10s) repeat across full scroll
+      video.currentTime = (scrollFraction * video.duration) % video.duration;
     }, { passive: true });
 
     // === GSAP SCROLL REVEAL (word-by-word) ===
