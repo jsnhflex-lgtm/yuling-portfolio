@@ -559,80 +559,35 @@
     }
     setTimeout(handleLoaded, 3000);
 
-    // === INDEPENDENT VIDEO SYNC — always follows scroll position ===
-    // Whether triggered by wheel, scrollbar drag, or touchpad, the video
-    // stays locked to the current scroll fraction.
-    const syncVideoToScroll = () => {
-      if (!isLoaded || !video || !video.duration) return;
-      const scrollFraction = Math.max(0, Math.min(1, window.scrollY / getMaxScroll()));
+    // === SCROLL-DRIVEN VIDEO SCRUB (rAF throttled + modulo loop) ===
+    let ticking = false;
+
+    const updateVideo = () => {
+      if (!isLoaded || !video || !video.duration || video.seeking) {
+        ticking = false;
+        return;
+      }
+      const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      const scrollFraction = Math.max(0, Math.min(1, window.scrollY / maxScroll));
+      // Loop the short video using modulo
       const targetTime = (scrollFraction * video.duration) % video.duration;
-      if (!video.seeking) {
+      // Only update if significantly different (avoid tiny seeks that cause stutter)
+      if (Math.abs(video.currentTime - targetTime) > 0.03) {
         video.currentTime = targetTime;
       }
+      ticking = false;
     };
 
-    // Listen to native scroll (scrollbar drag, touchpad momentum, etc.)
-    window.addEventListener('scroll', syncVideoToScroll, { passive: true });
-
-    // === SLOW SECTION-BASED SCROLL — one section per deliberate gesture ===
-    // Uses a simple delta threshold + cooldown. No accumulation — every wheel
-    // event above a tiny threshold can trigger, but the cooldown prevents
-    // rapid-fire skipping. Responsive without being jumpy.
-    const TOTAL_SECTIONS = 5;
-    let currentSection = 0;
-    let sectionAnimating = false;
-    let lastSectionTime = 0;
-    const SECTION_COOLDOWN = 1000; // ms — must wait at least 1s between sections
-    const WHEEL_MIN_DELTA = 8;     // ignore tiny jitter, but respond to light touch
-
-    const getMaxScroll = () => Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-
-    // Smoothly animate to a target scroll position (slow ease)
-    const animateToScroll = (targetY) => {
-      if (sectionAnimating) return;
-      sectionAnimating = true;
-      const startY = window.scrollY;
-      const duration = 1200; // ms — slow, cinematic transition
-      const startTime = performance.now();
-
-      const step = (now) => {
-        const elapsed = now - startTime;
-        const t = Math.min(elapsed / duration, 1);
-        // Ease out cubic
-        const ease = 1 - Math.pow(1 - t, 3);
-        const currentY = startY + (targetY - startY) * ease;
-        window.scrollTo(0, currentY);
-
-        if (t < 1) {
-          requestAnimationFrame(step);
-        } else {
-          window.scrollTo(0, targetY);
-          sectionAnimating = false;
-        }
-      };
-      requestAnimationFrame(step);
-    };
-
-    // Intercept wheel — simple threshold, no accumulation
-    window.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const now = performance.now();
-      if (now - lastSectionTime < SECTION_COOLDOWN) return;
-      if (sectionAnimating) return;
-      if (Math.abs(e.deltaY) < WHEEL_MIN_DELTA) return;
-
-      lastSectionTime = now;
-
-      if (e.deltaY > 0) {
-        currentSection = Math.min(currentSection + 1, TOTAL_SECTIONS - 1);
-      } else {
-        currentSection = Math.max(currentSection - 1, 0);
+    const onScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(updateVideo);
+        ticking = true;
       }
-      const targetY = (currentSection / (TOTAL_SECTIONS - 1)) * getMaxScroll();
-      animateToScroll(targetY);
-    }, { passive: false });
+    };
 
-    // === VIDEO RECOVERY on visibility change (fix freeze after tab switch) ===
+    window.addEventListener('scroll', onScroll, { passive: true });
+
+    // === VIDEO RECOVERY on visibility change ===
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && video && isLoaded) {
         // Browser may still be seeking after tab switch — retry until ready
@@ -642,11 +597,8 @@
             setTimeout(() => retrySync(attempt + 1), 100);
             return;
           }
-          // Force video to current scroll position
-          syncVideoToScroll();
-          // Re-sync section index
-          const scrollFrac = window.scrollY / getMaxScroll();
-          currentSection = Math.round(scrollFrac * (TOTAL_SECTIONS - 1));
+          // Force a scroll sync to re-align video with current scroll position
+          onScroll();
         };
         retrySync();
       }
